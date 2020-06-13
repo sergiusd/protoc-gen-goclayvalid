@@ -23,7 +23,7 @@ service ExampleService {
 }
 
 message ExampleMessage1 {
-    string my_string = 1 [json_name = "my_string", (gogoproto.moretags) = "validate:\"required,len=15\""];
+    string my_string = 1 [(gogoproto.moretags) = "validate:\"required,len=15\""];
 } 
 
 message ExampleMessage2 {

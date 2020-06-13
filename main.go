@@ -184,8 +184,9 @@ func (b *Builder) collectMessageDeep(message *descriptor.DescriptorProto, path s
 			b.log("  " + nestedPath)
 			nestedData := make(map[string]interface{}, len(nestedMessage.Field))
 			for _, field := range nestedMessage.Field {
-				b.log("    " + field.GetJsonName() + ", " + strings.Join(b.getValidateOption(field.GetOptions()), ", "))
-				nestedData[field.GetJsonName()] = b.getValidateOption(field.GetOptions())
+				fieldName := b.getFieldName(field)
+				b.log("    " + fieldName + ", " + strings.Join(b.getValidateOption(field.GetOptions()), ", "))
+				nestedData[fieldName] = b.getValidateOption(field.GetOptions())
 			}
 			b.messageValidateMap[nestedPath] = nestedData
 			if len(nestedMessage.NestedType) > 0 {
@@ -197,12 +198,13 @@ func (b *Builder) collectMessageDeep(message *descriptor.DescriptorProto, path s
 	if len(message.Field) > 0 {
 		data := make(map[string]interface{}, len(message.Field))
 		for _, field := range message.Field {
+			fieldName := b.getFieldName(field)
 			if field.TypeName != nil {
-				b.log("  " + field.GetJsonName() + ", " + *field.TypeName)
-				data[field.GetJsonName()] = b.messageValidateMap[*field.TypeName]
+				b.log("  " + fieldName + ", " + *field.TypeName)
+				data[fieldName] = b.messageValidateMap[*field.TypeName]
 			} else {
-				b.log("  " + field.GetJsonName() + ", " + strings.Join(b.getValidateOption(field.GetOptions()), ", "))
-				data[field.GetJsonName()] = b.getValidateOption(field.GetOptions())
+				b.log("  " + fieldName + ", " + strings.Join(b.getValidateOption(field.GetOptions()), ", "))
+				data[fieldName] = b.getValidateOption(field.GetOptions())
 			}
 		}
 		b.messageValidateMap[path] = data
