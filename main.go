@@ -2,28 +2,100 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/gogo/protobuf/proto"
-	go_proto "github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
-	"google.golang.org/genproto/googleapis/api/annotations"
+	"io"
 	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
+
+	//gogo_proto "github.com/gogo/protobuf/proto"
+	//"github.com/gogo/protobuf/gogoproto"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/protoc-gen-go/descriptor"
+	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
+	"google.golang.org/genproto/googleapis/api/annotations"
 )
 
+func main() {
+	err := func() error {
+		builder, err := NewBuilder(os.Stdin)
+		if err != nil {
+			return err
+		}
+
+		if err := builder.parseParameters(); err != nil {
+			return err
+		}
+
+		err = builder.generateCode()
+		if err != nil {
+			return err
+		}
+
+		return builder.write(os.Stdout)
+	}()
+	if err != nil {
+		panic(fmt.Sprintf("Error protoc-gen-goclayvalid: %+v", err))
+	}
+}
+
 type Builder struct {
-	Request    *plugin.CodeGeneratorRequest
-	Response   *plugin.CodeGeneratorResponse
-	urlMessageMap map[string]string
-	messageValidateMap map[string]interface{}
-	verbose bool
+	request              *plugin.CodeGeneratorRequest
+	response             *plugin.CodeGeneratorResponse
+	urlMessageMap        map[string]string
+	messageValidateMap   map[string]interface{}
+	verbose              bool
+	useOriginalFieldName bool
+	pretty               bool
+}
+
+func NewBuilder(input io.Reader) (*Builder, error) {
+	req := &plugin.CodeGeneratorRequest{}
+	resp := &plugin.CodeGeneratorResponse{}
+
+	data, err := ioutil.ReadAll(input)
+	if err != nil {
+		return nil, err
+	}
+
+	err = req.Unmarshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Builder{
+		request:              req,
+		response:             resp,
+		urlMessageMap:        make(map[string]string),
+		messageValidateMap:   make(map[string]interface{}),
+		verbose:              false,
+		useOriginalFieldName: false,
+		pretty:               false,
+	}, nil
+}
+
+func (b *Builder) parseParameters() error {
+	parameters := b.request.GetParameter()
+	for _, element := range strings.Split(parameters, ",") {
+		kv := strings.Split(element, "=")
+		switch kv[0] {
+		case "verbose":
+			b.verbose = true
+		case "pretty":
+			b.pretty = true
+		case "original_field_name":
+			b.useOriginalFieldName = true
+		default:
+			return errors.New("Unknown parameter '" + kv[0] + "'")
+		}
+	}
+	return nil
 }
 
 func (b *Builder) protoByName(protoName string) *descriptor.FileDescriptorProto {
-	for _, p := range b.Request.ProtoFile {
+	for _, p := range b.request.ProtoFile {
 		if p.GetName() == protoName {
 			return p
 		}
@@ -34,32 +106,32 @@ func (b *Builder) protoByName(protoName string) *descriptor.FileDescriptorProto 
 func (b *Builder) addHttpRule(ruleList []*annotations.HttpRule, message string) {
 	for _, rule := range ruleList {
 		if r := rule.GetGet(); r != "" {
-			b.urlMessageMap["GET " + r] = message
+			b.urlMessageMap["GET "+r] = message
 			b.log("    GET ", r)
 		}
 		if r := rule.GetPost(); r != "" {
-			b.urlMessageMap["POST " + r] = message
+			b.urlMessageMap["POST "+r] = message
 			b.log("    POST ", r)
 		}
 		if r := rule.GetPut(); r != "" {
-			b.urlMessageMap["PUT " + r] = message
+			b.urlMessageMap["PUT "+r] = message
 			b.log("    PUT ", r)
 		}
 		if r := rule.GetDelete(); r != "" {
-			b.urlMessageMap["DELETE " + r] = message
+			b.urlMessageMap["DELETE "+r] = message
 			b.log("    DELETE ", r)
 		}
 		if r := rule.GetPatch(); r != "" {
-			b.urlMessageMap["PATCH " + r] = message
+			b.urlMessageMap["PATCH "+r] = message
 			b.log("    PATCH ", r)
 		}
 	}
 
 }
 
-func (b *Builder) collectUrlMessage()  {
-	for _, filename := range b.Request.FileToGenerate {
-		b.log("services: " +  filename)
+func (b *Builder) collectUrlMessage() {
+	for _, filename := range b.request.FileToGenerate {
+		b.log("services: " + filename)
 		protoDesc := b.protoByName(filename)
 		if protoDesc == nil {
 			return
@@ -70,8 +142,8 @@ func (b *Builder) collectUrlMessage()  {
 				if method.Name != nil {
 					b.log("  method: ", *method.Name, *method.InputType)
 				}
-				if method.Options != nil && go_proto.HasExtension(method.Options, annotations.E_Http) {
-					extension, _ := go_proto.GetExtension(method.Options, annotations.E_Http)
+				if method.Options != nil && proto.HasExtension(method.Options, annotations.E_Http) {
+					extension, _ := proto.GetExtension(method.Options, annotations.E_Http)
 					httpRule, ok := extension.(*annotations.HttpRule)
 					if ok {
 						b.addHttpRule([]*annotations.HttpRule{httpRule}, *method.InputType)
@@ -84,7 +156,7 @@ func (b *Builder) collectUrlMessage()  {
 }
 
 func (b *Builder) collectMessage() {
-	for _, filename := range b.Request.FileToGenerate {
+	for _, filename := range b.request.FileToGenerate {
 		b.log("locations: ", filename)
 		protoDesc := b.protoByName(filename)
 		desc := protoDesc.GetSourceCodeInfo()
@@ -137,9 +209,17 @@ func (b *Builder) collectMessageDeep(message *descriptor.DescriptorProto, path s
 	}
 }
 
+func (b *Builder) getFieldName(field *descriptor.FieldDescriptorProto) string {
+	if b.useOriginalFieldName {
+		return field.GetName()
+	}
+	return field.GetJsonName()
+}
+
 func (b *Builder) getValidateOption(data *descriptor.FieldOptions) []string {
-	//extension, err := proto.GetExtension(data, gogoproto.E_Moretags)
-	//b.log("  > ", extension, err.Error())
+	// TODO get validate data from struct
+	//extension, err := gogo_proto.ExtensionDescs(data)
+	//b.log("    > ", extension, err.Error())
 	//moreTags, ok := extension.(*proto.ExtensionDesc)
 	//if !ok {
 	//	return nil
@@ -157,7 +237,7 @@ func (b *Builder) getValidateOption(data *descriptor.FieldOptions) []string {
 }
 
 func (b *Builder) createFile() error {
-	for _, filename := range b.Request.FileToGenerate {
+	for _, filename := range b.request.FileToGenerate {
 		data := make(map[string]interface{})
 		for url, messageName := range b.urlMessageMap {
 			if fields, ok := b.messageValidateMap[messageName]; ok {
@@ -170,14 +250,19 @@ func (b *Builder) createFile() error {
 		var mdFile plugin.CodeGeneratorResponse_File
 		mdFile.Name = &outfileName
 		var jsonData []byte
-		jsonData, err := json.MarshalIndent(data, "", "  ")
+		var err error
+		if b.pretty {
+			jsonData, err = json.MarshalIndent(data, "", "  ")
+		} else {
+			jsonData, err = json.Marshal(data)
+		}
 		if err != nil {
 			return err
 		}
 		content := string(jsonData)
 		mdFile.Content = &content
-		b.Response.File = append(b.Response.File, &mdFile)
-		println(fmt.Sprintf("Created validate file: '%s'", filename))
+		b.response.File = append(b.response.File, &mdFile)
+		println(fmt.Sprintf("Created validate file: %s -> %s", filename, outfileName))
 		println()
 	}
 	return nil
@@ -185,7 +270,7 @@ func (b *Builder) createFile() error {
 
 func (b *Builder) generateCode() error {
 	files := make([]*plugin.CodeGeneratorResponse_File, 0)
-	b.Response.File = files
+	b.response.File = files
 
 	b.collectUrlMessage()
 	b.collectMessage()
@@ -193,50 +278,23 @@ func (b *Builder) generateCode() error {
 	return b.createFile()
 }
 
-func (b *Builder) log(msg ...interface{}) {
-	if b.verbose {
-		fmt.Println(msg...)
+func (b *Builder) write(output io.Writer) error {
+	marshalled, err := proto.Marshal(b.response)
+	if err != nil {
+		return err
 	}
+	_, err = output.Write(marshalled)
+	return err
 }
 
-func main() {
-	req := &plugin.CodeGeneratorRequest{}
-	resp := &plugin.CodeGeneratorResponse{}
-
-	data, err := ioutil.ReadAll(os.Stdin)
-	if err != nil {
-		panic(err)
-	}
-
-	err = req.Unmarshal(data)
-	if err != nil {
-		panic(err)
-	}
-
-	builder := &Builder{
-		Request:    req,
-		Response:   resp,
-		urlMessageMap: make(map[string]string),
-		messageValidateMap: make(map[string]interface{}),
-		verbose: false,
-	}
-
-	parameters := req.GetParameter()
-	for _, element := range strings.Split(parameters, ",") {
-		kv := strings.Split(element, "=")
-		if kv[0] == "verbose" {
-			builder.verbose = true
+func (b *Builder) log(msg ...interface{}) {
+	if b.verbose {
+		for i, m := range msg {
+			if i == len(msg)-1 {
+				println(fmt.Sprintf("%v", m))
+			} else {
+				print(fmt.Sprintf("%v", m))
+			}
 		}
 	}
-
-	err = builder.generateCode()
-	if err != nil {
-		panic(err)
-	}
-
-	marshalled, err := proto.Marshal(resp)
-	if err != nil {
-		panic(err)
-	}
-	_, _ = os.Stdout.Write(marshalled)
 }

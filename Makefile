@@ -54,7 +54,7 @@ generate: bin-deps build ; $(info $(M) go generate…)
 			--plugin=protoc-gen-goclayvalid=$(LOCAL_BIN)/protoc-gen-goclayvalid \
 			-I$(FROM_SERVICES_TO_ROOT_REL)../api/:$(CURDIR)/vendor.pb \
 			--gofast_out=$(PKGMAP),plugins=grpc:. \
-			--goclayvalid_out=. \
+			--goclayvalid_out=original_field_name,pretty:. \
 			--goclay_out=$(PKGMAP),impl=true,impl_service_sub_dir=false,impl_path=$(FROM_SERVICES_TO_ROOT_REL)../$(PROJECT_STRUCTURE_IMPLEMENTATIONS)/$$srv,impl_type_name_tmpl=$(IMPLEMENTATION_TYPE_NAME):. \
 			$(FROM_SERVICES_TO_ROOT_REL)../$(PROJECT_STRUCTURE_API)/$$srv.proto; \
 	done
