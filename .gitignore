@@ -2,3 +2,4 @@
 bin/
 internal/
 output/
+test/*.bin

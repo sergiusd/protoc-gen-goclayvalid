@@ -1,0 +1,31 @@
+{
+  "GET /example/1": {
+    "my_string": [
+      "required",
+      "len=15"
+    ]
+  },
+  "GET /example/2": {
+    "my_int": [
+      "required",
+      "min=10",
+      "max=100"
+    ],
+    "nested": {
+      "nested2": {
+        "nested2_data": [
+          "required"
+        ]
+      },
+      "nested_data": [
+        "required"
+      ]
+    }
+  },
+  "POST /example/1/additional": {
+    "my_string": [
+      "required",
+      "len=15"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package v1;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+service ExampleService {
+    rpc ExampleCall1(ExampleMessage1) returns(ReturnType) {
+        option (google.api.http) = {
+            get: "/example/1"
+            additional_bindings {
+                post: "/example/1/additional"
+                body: "*"
+            }
+        };
+    }
+    rpc ExampleCall2(ExampleMessage2) returns(ReturnType) {
+        option (google.api.http) = {
+            get: "/example/2"
+        };
+    }
+}
+
+message ExampleMessage1 {
+    string my_string = 1 [(gogoproto.moretags) = "validate:\"required,len=15\""];
+}
+
+message ExampleMessage2 {
+    int32 my_int = 1 [json_name = "my_int", (gogoproto.moretags) = "validate:\"required,min=10,max=100\""];
+    message ExampleNested {
+        message ExampleNested2 {
+            bytes nested2_data = 1 [json_name = "nested2_data", (gogoproto.moretags) = "validate:\"required\""];
+        }
+        bytes nested_data = 1 [json_name = "nested_data", (gogoproto.moretags) = "validate:\"required\""];
+        ExampleNested2 nested2 = 2 [(gogoproto.moretags) = "validate:\"required,dive\""];
+    }
+    ExampleNested nested = 2 [(gogoproto.moretags) = "validate:\"required,dive\""];
+}
+
+message ReturnType {}

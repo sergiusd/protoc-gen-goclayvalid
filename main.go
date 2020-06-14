@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 
@@ -19,26 +20,27 @@ import (
 )
 
 func main() {
-	err := func() error {
-		builder, err := NewBuilder(os.Stdin)
-		if err != nil {
-			return err
-		}
-
-		if err := builder.parseParameters(); err != nil {
-			return err
-		}
-
-		err = builder.generateCode()
-		if err != nil {
-			return err
-		}
-
-		return builder.write(os.Stdout)
-	}()
-	if err != nil {
+	if err := processProto(os.Stdin, os.Stdout); err != nil {
 		panic(fmt.Sprintf("Error protoc-gen-goclayvalid: %+v", err))
 	}
+}
+
+func processProto(input io.Reader, output io.Writer) error {
+	builder, err := NewBuilder(input)
+	if err != nil {
+		return err
+	}
+
+	if err := builder.parseParameters(); err != nil {
+		return err
+	}
+
+	err = builder.generateCode()
+	if err != nil {
+		return err
+	}
+
+	return builder.write(output)
 }
 
 type Builder struct {
@@ -248,7 +250,7 @@ func (b *Builder) createFile() error {
 		}
 
 		var outfileName string
-		outfileName = strings.Replace(filename, ".proto", ".validate.json", -1)
+		outfileName = strings.Replace(path.Base(filename), ".proto", ".validate.json", -1)
 		var mdFile plugin.CodeGeneratorResponse_File
 		mdFile.Name = &outfileName
 		var jsonData []byte

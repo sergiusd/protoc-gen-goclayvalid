@@ -24,7 +24,7 @@ service ExampleService {
 
 message ExampleMessage1 {
     string my_string = 1 [(gogoproto.moretags) = "validate:\"required,len=15\""];
-} 
+}
 
 message ExampleMessage2 {
     int32 my_int = 1 [json_name = "my_int", (gogoproto.moretags) = "validate:\"required,min=10,max=100\""];
