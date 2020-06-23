@@ -1,9 +1,11 @@
 package main
 
 import (
-	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 	"io/ioutil"
 	"os"
+
+	"github.com/golang/protobuf/proto"
+	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
 func main() {
@@ -14,7 +16,7 @@ func main() {
 		panic(err)
 	}
 
-	err = req.Unmarshal(data)
+	err = proto.Unmarshal(data, req)
 	if err != nil {
 		panic(err)
 	}

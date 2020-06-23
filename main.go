@@ -62,7 +62,7 @@ func NewBuilder(input io.Reader) (*Builder, error) {
 		return nil, err
 	}
 
-	err = req.Unmarshal(data)
+	err = proto.Unmarshal(data, req)
 	if err != nil {
 		return nil, err
 	}
